@@ -1,9 +1,10 @@
--- Mission Bot 7.2 (Hover Corrigido + AutoClick)
+-- Mission Bot 7.2 (Hover Corrigido + AutoClick Estável)
 -- LocalScript em StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -14,7 +15,7 @@ local root = character:WaitForChild("HumanoidRootPart")
 local hoverHeight = 11
 local attackRate = 3
 local attackRemote = ReplicatedStorage:FindFirstChild("AttackEvent")
-local lerpSpeed = 0.22
+local lerpSpeed = 0.35 -- aumenta pra hover mais rápido
 
 -- ESTADO
 local alvoAtual = nil
@@ -82,7 +83,7 @@ local function setLying(state)
 	end
 end
 
--- Hover suave (Lerp) - corrigido para ficar **acima**
+-- Hover suave (Lerp) fixo acima do alvo
 local function startHover()
 	if not alvoAtual or not alvoAtual.Parent then return end
 	if hoverConn then return end
@@ -98,8 +99,9 @@ local function startHover()
 		end
 		local targetHRP = alvoAtual:FindFirstChild("HumanoidRootPart")
 		if not targetHRP then return end
-		-- Coloca **acima** do alvo
 		local destPos = targetHRP.Position + Vector3.new(0, hoverHeight, 0)
+		-- Força posição para ficar sempre acima, sem cair
+		root.Velocity = Vector3.new(0,0,0)
 		root.CFrame = root.CFrame:Lerp(CFrame.new(destPos, targetHRP.Position), lerpSpeed)
 	end)
 end
@@ -112,17 +114,26 @@ local function stopHover()
 	end
 end
 
--- AutoClick: ClickDetector ou AttackEvent
+-- AutoClick: ClickDetector / AttackEvent / VirtualUser
 local function autoClick(target)
 	if not target or not target.Parent then return end
+
+	-- AttackEvent
+	if attackRemote and attackRemote:IsA("RemoteEvent") then
+		pcall(function() attackRemote:FireServer(target) end)
+	end
+
 	-- ClickDetector
 	local cd = target:FindFirstChildOfClass("ClickDetector")
 	if cd then
 		pcall(function() fireclickdetector(cd) end)
-	end
-	-- AttackEvent (se existir)
-	if attackRemote and attackRemote:IsA("RemoteEvent") then
-		pcall(function() attackRemote:FireServer(target) end)
+	else
+		-- VirtualUser para simular clique
+		pcall(function()
+			VirtualUser:Button1Down(Vector2.new(0,0))
+			task.wait(0.01)
+			VirtualUser:Button1Up(Vector2.new(0,0))
+		end)
 	end
 end
 
@@ -149,9 +160,11 @@ local function fixarAlvo(model)
 	end
 end
 
--- UI (mantém igual)
+-- UI
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "MissionBotUI_v7"
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 999
 
 local sideBtn = Instance.new("TextButton", screenGui)
 sideBtn.Size = UDim2.new(0,40,0,40)
@@ -327,3 +340,4 @@ end)
 
 -- Inicializar
 atualizarListaManual()
+

@@ -1,4 +1,4 @@
--- Mission Bot 7.5 (Hover + AutoClick Katana + Hitbox Max)
+-- Mission Bot 7.6 (Hover + AutoClick Katana + Noclip + Lista de Missões)
 -- LocalScript em StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -23,6 +23,7 @@ local clickActive = false
 local flying = false
 local hoverConn = nil
 local autoClickLoop = nil
+local noclipOn = false
 
 -- UTILIDADES
 local function safeFindHumanoid(model)
@@ -42,6 +43,17 @@ local function findNextByName(name, skipModel)
 	end
 	return nil
 end
+
+-- Noclip persistente
+RunService.Heartbeat:Connect(function()
+	if noclipOn and character then
+		for _,p in ipairs(character:GetDescendants()) do
+			if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+				p.CanCollide = false
+			end
+		end
+	end
+end)
 
 -- Hover travado acima do inimigo
 local function startHover()
@@ -118,8 +130,8 @@ sideBtn.TextColor3 = Color3.new(1,1,1)
 sideBtn.TextSize = 18
 
 local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0,400,0,500)
-frame.Position = UDim2.new(0,56,0.5,-250)
+frame.Size = UDim2.new(0,400,0,550)
+frame.Position = UDim2.new(0,56,0.5,-275)
 frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
 frame.Visible = false
 
@@ -127,7 +139,7 @@ local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
 title.Position = UDim2.new(0,0,0,6)
 title.BackgroundTransparency = 1
-title.Text = "Mission Bot 7.5"
+title.Text = "Mission Bot 7.6"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 title.TextColor3 = Color3.new(1,1,1)
@@ -163,7 +175,7 @@ local btnUpdateList = makeBtn("Atualizar Lista",208,162)
 btnUpdateList.Size = UDim2.new(0,180,0,36)
 
 local listFrame = Instance.new("Frame", frame)
-listFrame.Size = UDim2.new(1,-16,0,180)
+listFrame.Size = UDim2.new(1,-16,0,200)
 listFrame.Position = UDim2.new(0,8,0,210)
 listFrame.BackgroundColor3 = Color3.fromRGB(38,38,38)
 
@@ -173,7 +185,8 @@ scrolling.BackgroundTransparency = 1
 scrolling.ScrollBarThickness = 6
 scrolling.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
 
-local function atualizarListaManual()
+-- Lista de inimigos
+local function atualizarListaInimigos()
 	for _,c in ipairs(scrolling:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
 	end
@@ -209,7 +222,33 @@ local function atualizarListaManual()
 	scrolling.CanvasSize = UDim2.new(0,0,y)
 end
 
--- Botões principais
+-- Lista de missões (exemplo, precisa ajustar conforme jogo)
+local missions = {"Missão 1", "Missão 2", "Missão 3", "Missão 4"}
+local missionFrame = Instance.new("Frame", frame)
+missionFrame.Size = UDim2.new(1,-16,0,150)
+missionFrame.Position = UDim2.new(0,8,0,420)
+missionFrame.BackgroundColor3 = Color3.fromRGB(28,28,28)
+local missionScrolling = Instance.new("ScrollingFrame", missionFrame)
+missionScrolling.Size = UDim2.new(1,0,1,0)
+missionScrolling.BackgroundTransparency = 1
+missionScrolling.ScrollBarThickness = 6
+missionScrolling.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
+for i,missionName in ipairs(missions) do
+	local b = Instance.new("TextButton", missionScrolling)
+	b.Size = UDim2.new(1,0,0,30)
+	b.Position = UDim2.new(0,0,0,(i-1)*32)
+	b.Text = missionName
+	b.Font = Enum.Font.SourceSans
+	b.TextSize = 14
+	b.TextColor3 = Color3.new(1,1,1)
+	b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	b.MouseButton1Click:Connect(function()
+		print("Selecionou missão: "..missionName)
+	end)
+end
+missionScrolling.CanvasSize = UDim2.new(0,0,#missions*32)
+
+-- Botão de menu
 sideBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 end)
@@ -244,9 +283,9 @@ btnClear.MouseButton1Click:Connect(function()
 	end
 end)
 
-btnUpdateList.MouseButton1Click:Connect(atualizarListaManual)
+btnUpdateList.MouseButton1Click:Connect(atualizarListaInimigos)
 
--- Atualização automática de alvo
+-- Atualização automática de alvo e troca ao matar
 RunService.Heartbeat:Connect(function()
 	if alvoAtual then
 		local h = safeFindHumanoid(alvoAtual)
@@ -265,5 +304,5 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- Inicializar lista
-atualizarListaManual()
+-- Inicializar lista de inimigos
+atualizarListaInimigos()

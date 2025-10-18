@@ -1,4 +1,4 @@
--- Mission Bot 8.0 (Hover + AutoClick + GUI Melhorada)
+-- Mission Bot 9.0 (GUI Refatorada + Hover + AutoClick)
 -- LocalScript em StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -16,7 +16,7 @@ local hoverHeight = 10
 local attackRate = 3
 local attackRemote = ReplicatedStorage:FindFirstChild("AttackEvent")
 local lerpSpeed = 0.25
-local autoClickDistance = 12 -- distância mínima para acionar auto click
+local autoClickDistance = 12
 
 -- ESTADO
 local alvoAtual = nil
@@ -25,6 +25,7 @@ local flying = false
 local hoverConn = nil
 local noclipOn = false
 local autoClickLoop = nil
+local menuOpen = true
 
 -- UTILIDADES
 local function safeFindHumanoid(model)
@@ -69,7 +70,6 @@ local function startHover()
 		end
 		local targetHRP = alvoAtual:FindFirstChild("HumanoidRootPart")
 		if not targetHRP then return end
-		-- Cálculo de posição: sempre hoverHeight acima
 		local targetPos = targetHRP.Position + Vector3.new(0, hoverHeight, 0)
 		root.CFrame = root.CFrame:Lerp(CFrame.new(targetPos, targetHRP.Position), lerpSpeed)
 	end)
@@ -88,15 +88,11 @@ local function autoClick(target)
 	if not target or not target.Parent then return end
 	local targetHRP = target:FindFirstChild("HumanoidRootPart")
 	if not targetHRP then return end
-	local distance = (root.Position - targetHRP.Position).Magnitude
-	if distance > autoClickDistance then return end
-
-	-- ClickDetector
+	if (root.Position - targetHRP.Position).Magnitude > autoClickDistance then return end
 	local cd = target:FindFirstChildOfClass("ClickDetector")
 	if cd then
 		pcall(function() fireclickdetector(cd) end)
 	end
-	-- AttackEvent
 	if attackRemote and attackRemote:IsA("RemoteEvent") then
 		pcall(function() attackRemote:FireServer(target) end)
 	end
@@ -128,6 +124,7 @@ end
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "MissionBotGUI"
 
+-- Botão lateral para abrir/fechar
 local sideBtn = Instance.new("TextButton", screenGui)
 sideBtn.Size = UDim2.new(0,40,0,40)
 sideBtn.Position = UDim2.new(0,6,0.5,-20)
@@ -137,17 +134,18 @@ sideBtn.Font = Enum.Font.SourceSansBold
 sideBtn.TextColor3 = Color3.new(1,1,1)
 sideBtn.TextSize = 18
 
+-- Frame principal
 local frame = Instance.new("Frame", screenGui)
 frame.Size = UDim2.new(0,320,0,440)
 frame.Position = UDim2.new(0,56,0.5,-220)
 frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
-frame.Visible = false
+frame.Visible = true
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
 title.Position = UDim2.new(0,0,0,6)
 title.BackgroundTransparency = 1
-title.Text = "Mission Bot 8.0"
+title.Text = "Mission Bot 9.0"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 title.TextColor3 = Color3.new(1,1,1)
@@ -176,7 +174,7 @@ end
 local btnGoto = makeBtn("Voar até alvo",8,70)
 local btnAutoClick = makeBtn("AutoClick: OFF",168,70)
 local btnNoclip = makeBtn("Noclip: OFF",8,116)
-local btnMinimize = makeBtn("Fechar Menu",168,116)
+local btnMenu = makeBtn("Fechar Menu",168,116)
 local btnUpdateList = makeBtn("Atualizar Lista",8,162)
 btnUpdateList.Size = UDim2.new(0,280,0,36)
 
@@ -191,6 +189,7 @@ scrolling.BackgroundTransparency = 1
 scrolling.ScrollBarThickness = 6
 scrolling.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
 
+-- Atualiza lista de inimigos
 local function atualizarListaManual()
 	for _,c in ipairs(scrolling:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
@@ -226,11 +225,13 @@ end
 
 -- BOTÕES
 sideBtn.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
+	menuOpen = not menuOpen
+	frame.Visible = menuOpen
 end)
 
-btnMinimize.MouseButton1Click:Connect(function()
-	frame.Visible = false
+btnMenu.MouseButton1Click:Connect(function()
+	menuOpen = not menuOpen
+	frame.Visible = menuOpen
 end)
 
 btnGoto.MouseButton1Click:Connect(function()
@@ -270,10 +271,4 @@ RunService.Heartbeat:Connect(function()
 				stopHover()
 			end
 		else
-			targetLabel.Text = "Alvo: "..alvoAtual.Name
-		end
-	end
-end)
-
--- Inicializar
-atualizarListaManual()
+			targetLabel.Text

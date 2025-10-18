@@ -1,9 +1,10 @@
--- Mission Bot 7.1 (Hover LERP) - FINALIZADO
+-- Mission Bot 7.4 (Hover + AutoClick + Menu de Missões)
 -- LocalScript em StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -11,10 +12,11 @@ local humanoid = character:WaitForChild("Humanoid")
 local root = character:WaitForChild("HumanoidRootPart")
 
 -- CONFIGURAÇÕES
-local hoverHeight = 11
+local hoverHeight = 10
 local attackRate = 3
 local attackRemote = ReplicatedStorage:FindFirstChild("AttackEvent")
-local lerpSpeed = 0.22
+local lerpSpeed = 0.25
+local autoClickDistance = 12
 
 -- ESTADO
 local alvoAtual = nil
@@ -22,18 +24,18 @@ local clickActive = false
 local flying = false
 local hoverConn = nil
 local noclipOn = false
-local lying = false
-local burstCo = nil
+local autoClickLoop = nil
+local missaoAtual = nil
 
 -- UTILIDADES
-local function safeFindHumanoid(m)
-	if not m then return nil end
-	local h = m:FindFirstChild("Humanoid")
+local function safeFindHumanoid(model)
+	if not model then return nil end
+	local h = model:FindFirstChild("Humanoid")
 	return (h and h:IsA("Humanoid")) and h or nil
 end
 
 local function findNextByName(name, skipModel)
-	for _,v in ipairs(workspace:GetDescendants()) do
+	for _,v in ipairs(Workspace:GetDescendants()) do
 		if v:IsA("Model") and v.Name == name and v ~= skipModel then
 			local h = safeFindHumanoid(v)
 			if h and h.Health > 0 then
@@ -55,55 +57,21 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- Deitar / levantar
-local savedPartsCollision = {}
-local function setLying(state)
-	if state == lying then return end
-	lying = state
-	if lying then
-		savedPartsCollision = {}
-		for _,part in ipairs(character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				savedPartsCollision[part] = part.CanCollide
-				part.CanCollide = false
-			end
-		end
-		root.CFrame = CFrame.new(root.Position) * CFrame.Angles(math.rad(90), 0, 0)
-		humanoid.PlatformStand = true
-	else
-		for part,can in pairs(savedPartsCollision) do
-			if part and part.Parent then
-				pcall(function() part.CanCollide = can end)
-			end
-		end
-		savedPartsCollision = {}
-		humanoid.PlatformStand = false
-		root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, 0, 0)
-	end
-end
-
--- Hover suave (Lerp)
+-- Hover acima do alvo
 local function startHover()
 	if not alvoAtual or not alvoAtual.Parent then return end
 	if hoverConn then return end
 	flying = true
 	hoverConn = RunService.RenderStepped:Connect(function()
 		if not flying or not alvoAtual or not alvoAtual.Parent then
-			if hoverConn then
-				hoverConn:Disconnect()
-				hoverConn = nil
-			end
+			if hoverConn then hoverConn:Disconnect() hoverConn = nil end
 			flying = false
 			return
 		end
-
 		local targetHRP = alvoAtual:FindFirstChild("HumanoidRootPart")
 		if not targetHRP then return end
-
-		local destPos = targetHRP.Position + Vector3.new(0, hoverHeight, 0)
-		local targetCFrame = CFrame.new(destPos, targetHRP.Position)
-		local newCFrame = root.CFrame:Lerp(targetCFrame, lerpSpeed)
-		root.CFrame = newCFrame
+		local targetPos = targetHRP.Position + Vector3.new(0, hoverHeight, 0)
+		root.CFrame = root.CFrame:Lerp(CFrame.new(targetPos, targetHRP.Position), lerpSpeed)
 	end)
 end
 
@@ -115,41 +83,53 @@ local function stopHover()
 	end
 end
 
--- Ataque simples
-local function atacarAlvo(target)
+-- AutoClick funcional
+local function autoClick(target)
 	if not target or not target.Parent then return end
-	if attackRemote and attackRemote:IsA("RemoteEvent") then
-		pcall(function() attackRemote:FireServer(target) end)
-	end
+	local targetHRP = target:FindFirstChild("HumanoidRootPart")
+	if not targetHRP then return end
+	if (root.Position - targetHRP.Position).Magnitude > autoClickDistance then return end
+
+	-- ClickDetector
 	local cd = target:FindFirstChildOfClass("ClickDetector")
 	if cd then
 		pcall(function() fireclickdetector(cd) end)
 	end
+
+	-- RemoteEvent
+	if attackRemote and attackRemote:IsA("RemoteEvent") then
+		pcall(function() attackRemote:FireServer(target) end)
+	end
 end
 
--- Auto M1
-local function startM1Loop()
-	if burstCo then return end
-	burstCo = coroutine.wrap(function()
-		while clickActive and alvoAtual and alvoAtual.Parent do
-			atacarAlvo(alvoAtual)
-			wait(1/attackRate)
+local function startAutoClick()
+	if autoClickLoop then return end
+	autoClickLoop = RunService.Heartbeat:Connect(function()
+		if clickActive and alvoAtual and alvoAtual.Parent then
+			autoClick(alvoAtual)
 		end
-		burstCo = nil
 	end)
-	burstCo()
+end
+
+local function stopAutoClick()
+	if autoClickLoop then
+		autoClickLoop:Disconnect()
+		autoClickLoop = nil
+	end
 end
 
 local function fixarAlvo(model)
 	if model and model.Parent then
 		alvoAtual = model
+		startHover()
 	end
 end
 
--- UI
+-- GUI HoHo Hub estilo
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "MissionBotUI_v7"
 
+-- Botão lateral
 local sideBtn = Instance.new("TextButton", screenGui)
 sideBtn.Size = UDim2.new(0,40,0,40)
 sideBtn.Position = UDim2.new(0,6,0.5,-20)
@@ -159,9 +139,10 @@ sideBtn.Font = Enum.Font.SourceSansBold
 sideBtn.TextColor3 = Color3.new(1,1,1)
 sideBtn.TextSize = 18
 
+-- Frame principal
 local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0,320,0,440)
-frame.Position = UDim2.new(0,56,0.5,-220)
+frame.Size = UDim2.new(0,400,0,500)
+frame.Position = UDim2.new(0,56,0.5,-250)
 frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
 frame.Visible = false
 
@@ -169,11 +150,12 @@ local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
 title.Position = UDim2.new(0,0,0,6)
 title.BackgroundTransparency = 1
-title.Text = "Mission Bot 7.1"
+title.Text = "Mission Bot 7.4"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 title.TextColor3 = Color3.new(1,1,1)
 
+-- Alvo atual
 local targetLabel = Instance.new("TextLabel", frame)
 targetLabel.Size = UDim2.new(1,0,0,20)
 targetLabel.Position = UDim2.new(0,0,0,42)
@@ -183,26 +165,31 @@ targetLabel.Font = Enum.Font.SourceSans
 targetLabel.TextSize = 14
 targetLabel.TextColor3 = Color3.fromRGB(180,180,180)
 
+-- Botões
 local function makeBtn(text,x,y)
 	local b = Instance.new("TextButton", frame)
-	b.Size = UDim2.new(0,140,0,36)
+	b.Size = UDim2.new(0,180,0,36)
 	b.Position = UDim2.new(0,x,0,y)
 	b.Text = text
+	b.Font = Enum.Font.SourceSans
+	b.TextSize = 16
+	b.TextColor3 = Color3.new(1,1,1)
+	b.BackgroundColor3 = Color3.fromRGB(50,50,50)
 	return b
 end
 
 local btnGoto = makeBtn("Voar até alvo",8,70)
-local btnM1 = makeBtn("M1: OFF",168,70)
+local btnAutoClick = makeBtn("AutoClick: OFF",208,70)
 local btnNoclip = makeBtn("Noclip: OFF",8,116)
-local btnLie = makeBtn("Deitar: OFF",168,116)
-local btnClear = makeBtn("Limpar Alvo",8,162)
-local btnMinimize = makeBtn("Minimizar Menu",168,162)
-local btnUpdateList = makeBtn("Atualizar Lista",8,210)
-btnUpdateList.Size = UDim2.new(0,280,0,36)
+local btnClear = makeBtn("Limpar Alvo",208,116)
+local btnMinimize = makeBtn("Minimizar Menu",8,162)
+local btnUpdateList = makeBtn("Atualizar Lista",208,162)
+btnUpdateList.Size = UDim2.new(0,180,0,36)
 
+-- Lista de inimigos
 local listFrame = Instance.new("Frame", frame)
 listFrame.Size = UDim2.new(1,-16,0,180)
-listFrame.Position = UDim2.new(0,8,0,256)
+listFrame.Position = UDim2.new(0,8,0,210)
 listFrame.BackgroundColor3 = Color3.fromRGB(38,38,38)
 
 local scrolling = Instance.new("ScrollingFrame", listFrame)
@@ -217,7 +204,7 @@ local function atualizarListaManual()
 	end
 	local y = 0
 	local seen = {}
-	for _,m in ipairs(workspace:GetDescendants()) do
+	for _,m in ipairs(Workspace:GetDescendants()) do
 		if m:IsA("Model") then
 			local h = safeFindHumanoid(m)
 			if h and h.Health > 0 and not seen[m.Name] then
@@ -247,7 +234,7 @@ local function atualizarListaManual()
 	scrolling.CanvasSize = UDim2.new(0,0,y)
 end
 
--- Botões
+-- Botões principais
 sideBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 end)
@@ -260,10 +247,14 @@ btnGoto.MouseButton1Click:Connect(function()
 	if flying then stopHover() else startHover() end
 end)
 
-btnM1.MouseButton1Click:Connect(function()
+btnAutoClick.MouseButton1Click:Connect(function()
 	clickActive = not clickActive
-	btnM1.Text = clickActive and "M1: ON" or "M1: OFF"
-	if clickActive then startM1Loop() end
+	btnAutoClick.Text = clickActive and "AutoClick: ON" or "AutoClick: OFF"
+	if clickActive then
+		startAutoClick()
+	else
+		stopAutoClick()
+	end
 end)
 
 btnNoclip.MouseButton1Click:Connect(function()
@@ -271,14 +262,10 @@ btnNoclip.MouseButton1Click:Connect(function()
 	btnNoclip.Text = noclipOn and "Noclip: ON" or "Noclip: OFF"
 end)
 
-btnLie.MouseButton1Click:Connect(function()
-	setLying(not lying)
-	btnLie.Text = lying and "Deitar: ON" or "Deitar: OFF"
-end)
-
 btnClear.MouseButton1Click:Connect(function()
 	alvoAtual = nil
 	targetLabel.Text = "Alvo: nenhum"
+	stopHover()
 	for _,other in ipairs(scrolling:GetChildren()) do
 		if other:IsA("TextButton") then
 			other.BackgroundColor3 = Color3.fromRGB(50,50,50)
@@ -296,21 +283,10 @@ RunService.Heartbeat:Connect(function()
 			local nextT = findNextByName(alvoAtual.Name, alvoAtual)
 			if nextT then
 				fixarAlvo(nextT)
-				targetLabel.Text = "Alvo: "..nextT.Name
-				for _,btn in ipairs(scrolling:GetChildren()) do
-					if btn:IsA("TextButton") and btn.Text == nextT.Name then
-						for _,other in ipairs(scrolling:GetChildren()) do
-							if other:IsA("TextButton") then
-								other.BackgroundColor3 = Color3.fromRGB(50,50,50)
-							end
-						end
-						btn.BackgroundColor3 = Color3.fromRGB(0,255,0)
-						break
-					end
-				end
 			else
 				alvoAtual = nil
 				targetLabel.Text = "Alvo: nenhum"
+				stopHover()
 			end
 		else
 			targetLabel.Text = "Alvo: "..alvoAtual.Name
@@ -318,5 +294,5 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- Inicializar
+-- Inicializar lista
 atualizarListaManual()

@@ -1,4 +1,4 @@
--- Mission Bot 7.4 (Hover + AutoClick + Menu de Missões)
+-- Mission Bot 7.5 (Hover + AutoClick Katana + Hitbox Max)
 -- LocalScript em StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -12,20 +12,17 @@ local humanoid = character:WaitForChild("Humanoid")
 local root = character:WaitForChild("HumanoidRootPart")
 
 -- CONFIGURAÇÕES
-local hoverHeight = 10
+local hoverHeight = 10 -- altura acima do inimigo
 local attackRate = 3
 local attackRemote = ReplicatedStorage:FindFirstChild("AttackEvent")
-local lerpSpeed = 0.25
-local autoClickDistance = 12
+local lerpSpeed = 0.3
 
 -- ESTADO
 local alvoAtual = nil
 local clickActive = false
 local flying = false
 local hoverConn = nil
-local noclipOn = false
 local autoClickLoop = nil
-local missaoAtual = nil
 
 -- UTILIDADES
 local function safeFindHumanoid(model)
@@ -46,32 +43,24 @@ local function findNextByName(name, skipModel)
 	return nil
 end
 
--- Noclip persistente
-RunService.Heartbeat:Connect(function()
-	if noclipOn and character then
-		for _,p in ipairs(character:GetDescendants()) do
-			if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-				p.CanCollide = false
-			end
-		end
-	end
-end)
-
--- Hover acima do alvo
+-- Hover travado acima do inimigo
 local function startHover()
 	if not alvoAtual or not alvoAtual.Parent then return end
 	if hoverConn then return end
 	flying = true
+	humanoid.PlatformStand = true -- personagem deitado
 	hoverConn = RunService.RenderStepped:Connect(function()
 		if not flying or not alvoAtual or not alvoAtual.Parent then
 			if hoverConn then hoverConn:Disconnect() hoverConn = nil end
 			flying = false
+			humanoid.PlatformStand = false
 			return
 		end
 		local targetHRP = alvoAtual:FindFirstChild("HumanoidRootPart")
-		if not targetHRP then return end
-		local targetPos = targetHRP.Position + Vector3.new(0, hoverHeight, 0)
-		root.CFrame = root.CFrame:Lerp(CFrame.new(targetPos, targetHRP.Position), lerpSpeed)
+		if targetHRP then
+			local targetPos = targetHRP.Position + Vector3.new(0, hoverHeight, 0)
+			root.CFrame = CFrame.new(targetPos, targetHRP.Position)
+		end
 	end)
 end
 
@@ -81,22 +70,12 @@ local function stopHover()
 		hoverConn:Disconnect()
 		hoverConn = nil
 	end
+	humanoid.PlatformStand = false
 end
 
--- AutoClick funcional
+-- AutoClick usando AttackEvent (Katana)
 local function autoClick(target)
 	if not target or not target.Parent then return end
-	local targetHRP = target:FindFirstChild("HumanoidRootPart")
-	if not targetHRP then return end
-	if (root.Position - targetHRP.Position).Magnitude > autoClickDistance then return end
-
-	-- ClickDetector
-	local cd = target:FindFirstChildOfClass("ClickDetector")
-	if cd then
-		pcall(function() fireclickdetector(cd) end)
-	end
-
-	-- RemoteEvent
 	if attackRemote and attackRemote:IsA("RemoteEvent") then
 		pcall(function() attackRemote:FireServer(target) end)
 	end
@@ -125,11 +104,10 @@ local function fixarAlvo(model)
 	end
 end
 
--- GUI HoHo Hub estilo
+-- GUI base 7.1
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "MissionBotUI_v7"
 
--- Botão lateral
 local sideBtn = Instance.new("TextButton", screenGui)
 sideBtn.Size = UDim2.new(0,40,0,40)
 sideBtn.Position = UDim2.new(0,6,0.5,-20)
@@ -139,7 +117,6 @@ sideBtn.Font = Enum.Font.SourceSansBold
 sideBtn.TextColor3 = Color3.new(1,1,1)
 sideBtn.TextSize = 18
 
--- Frame principal
 local frame = Instance.new("Frame", screenGui)
 frame.Size = UDim2.new(0,400,0,500)
 frame.Position = UDim2.new(0,56,0.5,-250)
@@ -150,12 +127,11 @@ local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
 title.Position = UDim2.new(0,0,0,6)
 title.BackgroundTransparency = 1
-title.Text = "Mission Bot 7.4"
+title.Text = "Mission Bot 7.5"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 title.TextColor3 = Color3.new(1,1,1)
 
--- Alvo atual
 local targetLabel = Instance.new("TextLabel", frame)
 targetLabel.Size = UDim2.new(1,0,0,20)
 targetLabel.Position = UDim2.new(0,0,0,42)
@@ -186,7 +162,6 @@ local btnMinimize = makeBtn("Minimizar Menu",8,162)
 local btnUpdateList = makeBtn("Atualizar Lista",208,162)
 btnUpdateList.Size = UDim2.new(0,180,0,36)
 
--- Lista de inimigos
 local listFrame = Instance.new("Frame", frame)
 listFrame.Size = UDim2.new(1,-16,0,180)
 listFrame.Position = UDim2.new(0,8,0,210)
@@ -250,11 +225,7 @@ end)
 btnAutoClick.MouseButton1Click:Connect(function()
 	clickActive = not clickActive
 	btnAutoClick.Text = clickActive and "AutoClick: ON" or "AutoClick: OFF"
-	if clickActive then
-		startAutoClick()
-	else
-		stopAutoClick()
-	end
+	if clickActive then startAutoClick() else stopAutoClick() end
 end)
 
 btnNoclip.MouseButton1Click:Connect(function()
